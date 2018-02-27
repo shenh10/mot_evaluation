@@ -3,7 +3,7 @@ import numpy as np
 import argparse
 from sklearn.utils.linear_assignment_ import linear_assignment
 from easydict import EasyDict as edict
-from utils.io import read_txt_to_struct, read_seqmaps, extract_valid_gt_data
+from utils.io import read_txt_to_struct, read_seqmaps, extract_valid_gt_data, print_metrics
 from utils.bbox import bbox_overlap
 from utils.measurements import clear_mot_hungarian, idmeasures
 
@@ -67,13 +67,15 @@ def evaluate_sequence(trackDB, gtDB, distractor_ids, iou_thres=0.5, minvis=0):
 
     gt_frames = np.unique(gtDB[:, 0])
     gt_ids = np.unique(gtDB[:, 1])
+    st_ids = np.unique(trackDB[:, 1])
     f_gt = len(gt_frames)
     n_gt = len(gt_ids)
+    n_st = len(st_ids)
 
     FN = sum(missed)
     FP = sum(fp)
     IDS = sum(mme)
-    MOTP = (1 - sum(sum(d)) / sum(c)) * 100                                             # MOTP = 1 - sum(iou) / # corrected boxes
+    MOTP = (1 - sum(sum(d)) / sum(c)) * 100                                             # MOTP = 1 - sum(1 - iou) / # corrected boxes
     MOTAL = (1 - (sum(fp) + sum(missed) + np.log10(sum(mme) + 1)) / sum(g)) * 100       # MOTAL = 1 - (# fp + # fn + #log10(ids)) / # gts
     MOTA = (1 - (sum(fp) + sum(missed) + sum(mme)) / sum(g)) * 100                      # MOTA = 1 - (# fp + # fn + # ids) / # gts
     recall = sum(c) / sum(g) * 100                                                      # recall = TP / (TP + FN) = # corrected boxes / # gt boxes
@@ -82,20 +84,20 @@ def evaluate_sequence(trackDB, gtDB, distractor_ids, iou_thres=0.5, minvis=0):
 
     MT_stats = np.zeros((n_gt, ), dtype=float)
     for i in xrange(n_gt):
-        gt_in_person = np.where(gtDB[:, 1] == i + 1)[0]
+        gt_in_person = np.where(gtDB[:, 1] == gt_ids[i])[0]
         gt_total_len = len(gt_in_person)
-        if gt_total_len == 0:
-            continue
-        gt_frames = (gtDB[gt_in_person, 0] - 1).astype(int)
-        st_total_len = sum([1 if i in M[f].keys() else 0 for f in gt_frames])
+        gt_frames_tmp = gtDB[gt_in_person, 0].astype(int)
+        gt_frames_list = list(gt_frames)
+        st_total_len = sum([1 if i in M[gt_frames_list.index(f)].keys() else 0 for f in gt_frames_tmp])
         ratio = float(st_total_len) / gt_total_len
         
         if ratio < 0.2:
-            MT_stats[i - 1] = 1
+            MT_stats[i] = 1
         elif ratio >= 0.8:
-            MT_stats[i - 1] = 3
+            MT_stats[i] = 3
         else:
-            MT_stats[i - 1] = 2
+            MT_stats[i] = 2
+            
     ML = len(np.where(MT_stats == 1)[0])
     PT = len(np.where(MT_stats == 2)[0])
     MT = len(np.where(MT_stats == 3)[0])
@@ -106,14 +108,14 @@ def evaluate_sequence(trackDB, gtDB, distractor_ids, iou_thres=0.5, minvis=0):
     
     for i in xrange(f_gt):
         for gid in M[i].keys():
-            M_arr[i, gid - 1] = M[i][gid - 1] + 1
+            M_arr[i, gid] = M[i][gid] + 1
     
     for i in xrange(n_gt):
         occur = np.where(M_arr[:, i] > 0)[0]
-        occur = np.where(diff(occur) != 1)[0]
+        occur = np.where(np.diff(occur) != 1)[0]
         fr[i] = len(occur)
     FRA = sum(fr)
-    idmetrics = idmeasures(gtDB, stDB, iou_thres)
+    idmetrics = idmeasures(gtDB, trackDB, iou_thres)
     metrics = [idmetrics.IDF1, idmetrics.IDP, idmetrics.IDR, recall, precision, FAR, n_gt, MT, PT, ML, FP, FN, IDS, FRA, MOTA, MOTP, MOTAL]
     extra_info = edict()
     extra_info.mme = sum(mme)
@@ -122,7 +124,7 @@ def evaluate_sequence(trackDB, gtDB, distractor_ids, iou_thres=0.5, minvis=0):
     extra_info.g = sum(g)
     extra_info.missed = sum(missed)
     extra_info.d = d
-    extra_info.M = M
+    #extra_info.m = M
     extra_info.f_gt = f_gt
     extra_info.n_gt = n_gt
     extra_info.n_st = n_st
@@ -131,7 +133,7 @@ def evaluate_sequence(trackDB, gtDB, distractor_ids, iou_thres=0.5, minvis=0):
     extra_info.ML = ML
     extra_info.PT = PT
     extra_info.MT = MT
-    extra.FRA = FRA
+    extra_info.FRA = FRA
     extra_info.idmetrics = idmetrics
     return metrics, extra_info
 
@@ -139,10 +141,11 @@ def evaluate_sequence(trackDB, gtDB, distractor_ids, iou_thres=0.5, minvis=0):
 
 def evaluate_bm(all_metrics):
     f_gt, n_gt, n_st = 0, 0, 0
-    nbox_gt, nbox_gt = 0, 0
+    nbox_gt, nbox_st = 0, 0
     c, g, fp, missed, ids = 0, 0, 0, 0, 0
     IDTP, IDFP, IDFN = 0, 0, 0
     MT, ML, PT, FRA = 0, 0, 0, 0
+    overlap_sum = 0
     for i in xrange(len(all_metrics)):
 	nbox_gt += all_metrics[i].idmetrics.nbox_gt
 	nbox_st += all_metrics[i].idmetrics.nbox_st
@@ -187,8 +190,6 @@ def evaluate_tracking(sequences, track_dir, gt_dir):
         gtDB = read_txt_to_struct(gt_file)
         
         gtDB, distractor_ids = extract_valid_gt_data(gtDB)
-        import pdb
-        pdb.set_trace()
         metrics, extra_info = evaluate_sequence(trackDB, gtDB, distractor_ids)
         print_metrics(seqname + ' Evaluation', metrics)
         all_info.append(extra_info)

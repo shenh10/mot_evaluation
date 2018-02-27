@@ -1,18 +1,19 @@
 import numpy as np
 from sklearn.utils.linear_assignment_ import linear_assignment
 from bbox import bbox_overlap
+from easydict import EasyDict as edict
 VERBOSE = False
 def clear_mot_hungarian(stDB, gtDB, threshold):
     st_frames = np.unique(stDB[:, 0])
     gt_frames = np.unique(gtDB[:, 0])
     st_ids = np.unique(stDB[:, 1])
     gt_ids = np.unique(gtDB[:, 1])
-    f_gt = int(max(max(st_frames), max(gt_frames)))  
-    n_gt = int(max(gt_ids)) 
-    n_st = int(max(st_ids)) 
-    #f_gt = len(gt_frames)
-    #n_gt = len(gt_ids)
-    #n_st = len(st_ids)
+    #f_gt = int(max(max(st_frames), max(gt_frames)))  
+    #n_gt = int(max(gt_ids)) 
+    #n_st = int(max(st_ids)) 
+    f_gt = len(gt_frames)
+    n_gt = len(gt_ids)
+    n_st = len(st_ids)
 
     mme = np.zeros((f_gt, ), dtype=float)          # ID switch in each frame
     c = np.zeros((f_gt, ), dtype=float)            # matches found in each frame
@@ -29,13 +30,17 @@ def clear_mot_hungarian(stDB, gtDB, threshold):
 
     # hash the indices to speed up indexing
     for i in xrange(gtDB.shape[0]):
-        frame = int(gtDB[i, 0]) - 1
-        gid = int(gtDB[i, 1])
+        #frame = int(gtDB[i, 0]) - 1
+        #gid = int(gtDB[i, 1])
+        frame = np.where(gt_frames == gtDB[i, 0])[0][0]
+        gid = np.where(gt_ids == gtDB[i, 1])[0][0]
         gt_inds[frame][gid - 1] = i
 
     for i in xrange(stDB.shape[0]):
-        frame = int(stDB[i, 0]) - 1
-        sid = int(stDB[i, 1])
+        #frame = int(stDB[i, 0]) - 1
+        #sid = int(stDB[i, 1])
+        frame = np.where(st_frames == stDB[i, 0])[0][0]
+        sid = np.where(st_ids == stDB[i, 1])[0][0]
         st_inds[frame][sid] = i
 
     for t in xrange(f_gt):
@@ -107,7 +112,7 @@ def clear_mot_hungarian(stDB, gtDB, threshold):
             est = M[t][ct]
             row_gt = gt_inds[t][ct]
             row_st = st_inds[t][est]
-            d[t][ct] = bbox_overlap(stDB[row_st, 2:6], gtDB[row_gt, 2:6])
+            d[t][ct] = 1 - bbox_overlap(stDB[row_st, 2:6], gtDB[row_gt, 2:6])
         
     return mme, c, fp, g, missed, d, M, allfps
 
@@ -116,8 +121,8 @@ def idmeasures(gtDB, stDB, threshold):
     gt_ids = np.unique(gtDB[:, 1])
     n_st = len(st_ids)
     n_gt = len(gt_ids)
-    groundtruth = [gtDB[np.where(gtDB[:, 1] == i)[0], :] for i in xrange(n_gt)]
-    prediction = [stDB[np.where(stDB[:, 1] == i)[0], :] for i in xrange(n_st)]
+    groundtruth = [gtDB[np.where(gtDB[:, 1] == gt_ids[i])[0], :] for i in xrange(n_gt)]
+    prediction = [stDB[np.where(stDB[:, 1] == st_ids[i])[0], :] for i in xrange(n_st)]
     cost = np.zeros((n_gt + n_st, n_st + n_gt), dtype=float)
     cost[n_gt:, :n_st] = float('inf')
     cost[:n_gt, n_st:] = float('inf')
@@ -133,8 +138,8 @@ def idmeasures(gtDB, stDB, threshold):
 
     # computed trajectory match no groundtruth trajectory, FP
     for i in xrange(n_st):
-        cost[i + n_gt:, i] = prediction[i].shape[0]
-        fp[i + n_gt:, i] = prediction[i].shape[0]
+        cost[i + n_gt, i] = prediction[i].shape[0]
+        fp[i + n_gt, i] = prediction[i].shape[0]
     
     # groundtruth trajectory match no computed trajectory, FN
     for i in xrange(n_gt):
@@ -154,8 +159,7 @@ def idmeasures(gtDB, stDB, threshold):
         IDFN += fn[matched[0], matched[1]]
 
     IDTP = nbox_gt - IDFN
-
-    assert IDTP == nbox_gt - IDFP
+    assert IDTP == nbox_st - IDFP
     IDP = IDTP / (IDTP + IDFP) * 100               # IDP = IDTP / (IDTP + IDFP)
     IDR = IDTP / (IDTP + IDFN) * 100               # IDR = IDTP / (IDTP + IDFN)
     IDF1 = 2 * IDTP / (nbox_gt + nbox_st) * 100    # IDF1 = 2 * IDTP / (2 * IDTP + IDFP + IDFN)
@@ -174,7 +178,7 @@ def idmeasures(gtDB, stDB, threshold):
 
 def corresponding_frame(traj1, len1, traj2, len2):
     p1, p2 = 0, 0
-    loc = np.zeros((len1, ), dtype=int)
+    loc = -1 * np.ones((len1, ), dtype=int)
     while p1 < len1 and p2 < len2:
         if traj1[p1] < traj2[p2]:
             loc[p1] = -1
@@ -200,7 +204,6 @@ def compute_distance(traj1, traj2, matched_pos):
 def cost_between_trajectories(traj1, traj2, threshold):
     [npoints1, dim1] = traj1.shape
     [npoints2, dim2] = traj2.shape
-    
     # find start and end frame of each trajectories
     start1 = traj1[0, 0]
     end1 = traj1[-1, 0]
@@ -208,18 +211,23 @@ def cost_between_trajectories(traj1, traj2, threshold):
     end2 = traj2[-1, 0]
 
     ## check frame overlap
-    has_overlap = max(start1, start2) <= min(end1, end2)
+    has_overlap = max(start1, start2) < min(end1, end2)
     if not has_overlap:
-        return npoints1, npoints2
+        fn = npoints1
+        fp = npoints2
+        return fp, fn
     
+    # gt trajectory mapping to st, check gt missed
     matched_pos1 = corresponding_frame(traj1[:, 0], npoints1, traj2[:, 0], npoints2)
+    # st trajectory mapping to gt, check computed one false alarms
     matched_pos2 = corresponding_frame(traj2[:, 0], npoints2, traj1[:, 0], npoints1)
     dist1 = compute_distance(traj1, traj2, matched_pos1)
     dist2 = compute_distance(traj2, traj1, matched_pos2)
-
-    err1 = sum([1 for i in xrange(npoints1) if dist1[i] < threshold]) 
-    err2 = sum([1 for i in xrange(npoints2) if dist2[i] < threshold]) 
-    return err1, err2
+    # FN
+    fn = sum([1 for i in xrange(npoints1) if dist1[i] < threshold]) 
+    # FP
+    fp = sum([1 for i in xrange(npoints2) if dist2[i] < threshold]) 
+    return fp, fn
 
 def cost_between_gt_pred(groundtruth, prediction, threshold):
     n_gt =  len(groundtruth)
