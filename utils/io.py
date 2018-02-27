@@ -26,7 +26,8 @@ def read_txt_to_struct(fname):
     data = np.array(data)
 
     # change point-size format to two-points format
-    data[4:6] += data[2:4]
+    data[:, 4:6] += data[:, 2:4]
+    
     return data
 
 def extract_valid_gt_data(all_data):
@@ -49,7 +50,7 @@ def extract_valid_gt_data(all_data):
 
     cond = np.array([i in distractor_classes for i in all_data[:, 7]]) 
     selected = np.where(cond == True)[0]
-    distractor_ids = all_data[selected, :]
+    distractor_ids = np.unique(all_data[selected, :])
 
     return all_data, distractor_ids
 

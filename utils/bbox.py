@@ -1,8 +1,11 @@
 import numpy as np
 
 def bbox_overlap(ex_box, gt_box):
+    ex_box = ex_box.reshape(-1, 4)
+    gt_box = gt_box.reshape(-1, 4)
     paded_gt = np.tile(gt_box, [ex_box.shape[0],1])
     insec = intersection(ex_box, paded_gt)
+
     uni = areasum(ex_box, paded_gt) - insec
     return insec / uni
 

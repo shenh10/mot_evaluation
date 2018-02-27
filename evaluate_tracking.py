@@ -1,18 +1,19 @@
 import os
 import numpy as np
+import argparse
 from sklearn.utils.linear_assignment_ import linear_assignment
 from easydict import EasyDict as edict
-from utils.io import read_txt_to_struct, read_seqmaps
+from utils.io import read_txt_to_struct, read_seqmaps, extract_valid_gt_data
 from utils.bbox import bbox_overlap
 from utils.measurements import clear_mot_hungarian, idmeasures
 
 
 
 def preprocessingDB(trackDB, gtDB, distractor_ids, iou_thres, minvis):
-    track_frames = list(set(trackDB[:, 0]))
-    gt_frames = list(set(gtDB[:, 0]))
+    track_frames = np.unique(trackDB[:, 0])
+    gt_frames = np.unique(gtDB[:, 0])
     nframes = min(len(track_frames), len(gt_frames))  
-    res_keep = np.ones((trackDB.shape[0], 1), dtype=float)
+    res_keep = np.ones((trackDB.shape[0], ), dtype=float)
     for i in xrange(1, nframes + 1):
         # find all result boxes in this frame
         res_in_frame = np.where(trackDB[:, 0] == i)[0]
@@ -31,21 +32,25 @@ def preprocessingDB(trackDB, gtDB, distractor_ids, iou_thres, minvis):
                 continue
 
             # matched to distractors, discard the result box
-            if gt_in_frame[matched[1], 1] in distractor_ids:
+            if gt_in_frame_data[matched[1], 1] in distractor_ids:
                 res_keep[res_in_frame[matched[0]]] = 0
             
             # matched to a partial
-            if gt_in_frame[matched[1], 8] < minvis:
+            if gt_in_frame_data[matched[1], 8] < minvis:
                 res_keep[res_in_frame[matched[0]]] = 0
-        keep_idx = np.where(res_keep == 1)[0]
-        res_in_frame = res_in_frame[keep_idx, :]
         
         # sanity check
-        frame_id_pairs = res_in_frame[:, :2]
-        uniq_frame_id_pairs = list(set(frame_id_pairs))
+        frame_id_pairs = res_in_frame_data[:, :2]
+        uniq_frame_id_pairs = np.unique(frame_id_pairs)
         has_duplicates = uniq_frame_id_pairs.shape[0] < frame_id_pairs.shape[0]
         assert not has_duplicates, 'Duplicate ID in same frame [Frame ID: %d].'%i
+    keep_idx = np.where(res_keep == 1)[0]
+    print '[TRACK PREPROCESSING]: remaining %d/%d computed boxes'%(len(keep_idx), len(res_keep))
     trackDB = trackDB[keep_idx, :]
+    cond = np.array([gtDB[i, 1] in distractor_ids for i in xrange(gtDB.shape[0])])
+    keep_idx = np.where(cond == False)[0]
+    print '[GT PREPROCESSING]: remaining %d/%d computed boxes'%(len(keep_idx), gtDB.shape[0])
+    gtDB = gtDB[keep_idx, :]
     return trackDB, gtDB
 
 
@@ -58,12 +63,12 @@ def evaluate_sequence(trackDB, gtDB, distractor_ids, iou_thres=0.5, minvis=0):
     minvis: minimum tolerent visibility
     """
     trackDB, gtDB = preprocessingDB(trackDB, gtDB, distractor_ids, iou_thres, minvis)
-    mme, c, fp, g, missed, d, M, allfps = clear_mot_hungarian(trackDB, gtDB)
+    mme, c, fp, g, missed, d, M, allfps = clear_mot_hungarian(trackDB, gtDB, iou_thres)
 
-    gt_frames = list(set(gtDB[:, 0]))
-    gt_ids = list(set(gtDB[:, 1]))
-    f_gt = max(gt_frames)
-    n_gt = max(gt_ids) 
+    gt_frames = np.unique(gtDB[:, 0])
+    gt_ids = np.unique(gtDB[:, 1])
+    f_gt = len(gt_frames)
+    n_gt = len(gt_ids)
 
     FN = sum(missed)
     FP = sum(fp)
@@ -75,12 +80,14 @@ def evaluate_sequence(trackDB, gtDB, distractor_ids, iou_thres=0.5, minvis=0):
     precision = sum(c) / (sum(fp) + sum(c)) * 100                                       # precision = TP / (TP + FP) = # corrected boxes / # det boxes
     FAR = sum(fp) / f_gt                                                                # FAR = sum(fp) / # frames
 
-    MT_stats = np.zeros((n_gt, 1), dtype=float)
-    for i in xrange(1, n_gt + 1):
-        gt_in_person = np.where(gtDB[:, 1] == i)[0]
+    MT_stats = np.zeros((n_gt, ), dtype=float)
+    for i in xrange(n_gt):
+        gt_in_person = np.where(gtDB[:, 1] == i + 1)[0]
         gt_total_len = len(gt_in_person)
-        gt_frames = gtDB[gt_in_person, 0]
-        st_total_len = len(np.where((i in M[gt_frames].keys()) == True)[0])
+        if gt_total_len == 0:
+            continue
+        gt_frames = (gtDB[gt_in_person, 0] - 1).astype(int)
+        st_total_len = sum([1 if i in M[f].keys() else 0 for f in gt_frames])
         ratio = float(st_total_len) / gt_total_len
         
         if ratio < 0.2:
@@ -94,19 +101,19 @@ def evaluate_sequence(trackDB, gtDB, distractor_ids, iou_thres=0.5, minvis=0):
     MT = len(np.where(MT_stats == 3)[0])
 
     # fragment
-    fr = np.zeros((n_gt, 1), dtype=int)
+    fr = np.zeros((n_gt, ), dtype=int)
     M_arr = np.zeros((f_gt, n_gt), dtype=int)
     
     for i in xrange(f_gt):
         for gid in M[i].keys():
-            M_arr[i, gid - 1] = M[i][gid - 1]
+            M_arr[i, gid - 1] = M[i][gid - 1] + 1
     
     for i in xrange(n_gt):
         occur = np.where(M_arr[:, i] > 0)[0]
         occur = np.where(diff(occur) != 1)[0]
         fr[i] = len(occur)
     FRA = sum(fr)
-    idmetrics = idmeasures(gtDB, stDB, theshold)
+    idmetrics = idmeasures(gtDB, stDB, iou_thres)
     metrics = [idmetrics.IDF1, idmetrics.IDP, idmetrics.IDR, recall, precision, FAR, n_gt, MT, PT, ML, FP, FN, IDS, FRA, MOTA, MOTP, MOTAL]
     extra_info = edict()
     extra_info.mme = sum(mme)
@@ -180,6 +187,8 @@ def evaluate_tracking(sequences, track_dir, gt_dir):
         gtDB = read_txt_to_struct(gt_file)
         
         gtDB, distractor_ids = extract_valid_gt_data(gtDB)
+        import pdb
+        pdb.set_trace()
         metrics, extra_info = evaluate_sequence(trackDB, gtDB, distractor_ids)
         print_metrics(seqname + ' Evaluation', metrics)
         all_info.append(extra_info)
@@ -200,4 +209,4 @@ def parse_args():
 if __name__ == '__main__':
     args = parse_args()
     sequences = read_seqmaps(args.seqmap) 
-
+    evaluate_tracking(sequences, args.track, args.gt)

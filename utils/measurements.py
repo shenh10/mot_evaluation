@@ -1,20 +1,25 @@
 import numpy as np
 from sklearn.utils.linear_assignment_ import linear_assignment
+from bbox import bbox_overlap
+VERBOSE = False
+def clear_mot_hungarian(stDB, gtDB, threshold):
+    st_frames = np.unique(stDB[:, 0])
+    gt_frames = np.unique(gtDB[:, 0])
+    st_ids = np.unique(stDB[:, 1])
+    gt_ids = np.unique(gtDB[:, 1])
+    f_gt = int(max(max(st_frames), max(gt_frames)))  
+    n_gt = int(max(gt_ids)) 
+    n_st = int(max(st_ids)) 
+    #f_gt = len(gt_frames)
+    #n_gt = len(gt_ids)
+    #n_st = len(st_ids)
 
-def clear_mot_hungarian(stDB, gtDB):
-    st_frames = list(set(stDB[:, 0]))
-    gt_frames = list(set(gtDB[:, 0]))
-    st_ids = list(set(stDB[:, 1]))
-    gt_ids = list(set(gtDB[:, 1]))
-    f_gt = max(max(st_frames), max(gt_frames))  
-    n_gt = max(gt_ids) 
-    n_st = max(st_ids) 
-    mme = np.zeros((f_gt, 1), dtype=float)          # ID switch in each frame
-    c = np.zeros((f_gt, 1), dtype=float)            # matches found in each frame
-    fp = np.zeros((f_gt, 1), dtype=float)           # false positives in each frame
-    missed = np.zeros((f_gt, 1), dtype=float)       # missed gts in each frame
+    mme = np.zeros((f_gt, ), dtype=float)          # ID switch in each frame
+    c = np.zeros((f_gt, ), dtype=float)            # matches found in each frame
+    fp = np.zeros((f_gt, ), dtype=float)           # false positives in each frame
+    missed = np.zeros((f_gt, ), dtype=float)       # missed gts in each frame
     
-    g = np.zeros((f_gt, 1), dtype=float)            # gt count in each frame
+    g = np.zeros((f_gt, ), dtype=float)            # gt count in each frame
     d = np.zeros((f_gt, n_gt), dtype=float)         # overlap matrix
     allfps = np.zeros((f_gt, n_st), dtype=float)
     
@@ -24,17 +29,17 @@ def clear_mot_hungarian(stDB, gtDB):
 
     # hash the indices to speed up indexing
     for i in xrange(gtDB.shape[0]):
-        frame = gtDB[i, 0] - 1
-        gid = gtDB[i, 1]
-        gt_inds[frame][gid] = i
+        frame = int(gtDB[i, 0]) - 1
+        gid = int(gtDB[i, 1])
+        gt_inds[frame][gid - 1] = i
 
     for i in xrange(stDB.shape[0]):
-        frame = stDB[i, 0] - 1
-        sid = stDB[i, 1]
+        frame = int(stDB[i, 0]) - 1
+        sid = int(stDB[i, 1])
         st_inds[frame][sid] = i
 
     for t in xrange(f_gt):
-        g[t] = len(gt_inds[j].keys()) 
+        g[t] = len(gt_inds[t].keys()) 
         
         if t > 0:
             mappings = M[t - 1].keys()
@@ -43,31 +48,31 @@ def clear_mot_hungarian(stDB, gtDB):
                 if mappings[k] in gt_inds[t].keys() and M[t - 1][mappings[k]] in st_inds[t].keys():
                     row_gt = gt_inds[t][mappings[k]]
                     row_st = st_inds[t][M[t - 1][mappings[k]]]
-                    dist = 1 - bbox_overlap(stDB[row_st, 2:6], gtDB[row_gt, 2:6])
-                    if dist <= threshold:
+                    dist = bbox_overlap(stDB[row_st, 2:6], gtDB[row_gt, 2:6])
+                    if dist >= threshold:
                         M[t][mappings[k]] = M[t - 1][mappings[k]]
+                        if VERBOSE:
+                            print 'perserving mapping: %d to %d'%(mappings[k], M[t][mappings[k]])
         unmapped_gt, unmapped_st  = [], []
         unmapped_gt = [key for key in gt_inds[t].keys() if key not in M[t].keys()]
         unmapped_st = [key for key in st_inds[t].keys() if key not in M[t].values()]
-        
-        uid = 0   # unique identifier
-        overlaps = float('Inf')*np.ones((len(unmapped_gt), len(unmapped_st)), dtype=float)
-        for i in xrange(len(unmapped_gt)):
-            row_gt = gt_inds[t][unmapped_gt[i]]
-            for j in xrange(len(unmapped_st)):
-                row_st = st_inds[t][unmapped_st[j]]
-                dist = 1 - bbox_overlap(stDB[row_st, 2:6], gtDB[row_gt, 2:6])
-                if dist <= threshold:
-                    overlaps[i][j] = dist
-                    overlaps[i][j] += 1e-9 * uid
-                    uid += 1
-        matched_indices = linear_assignment(overlaps)
-        
-        for matched in matched_indices:
-            if overlaps[matched] == float('Inf'):
-                continue
-            M[t][unmapped_gt[matched[0]]] = unmapped_st[matched[1]]
-        
+        if len(unmapped_gt) > 0 and len(unmapped_st) > 0: 
+            overlaps = np.zeros((n_gt, n_st), dtype=float)
+            for i in xrange(len(unmapped_gt)):
+                row_gt = gt_inds[t][unmapped_gt[i]]
+                for j in xrange(len(unmapped_st)):
+                    row_st = st_inds[t][unmapped_st[j]]
+                    dist = bbox_overlap(stDB[row_st, 2:6], gtDB[row_gt, 2:6])
+                    if dist >= threshold:
+                        overlaps[i][j] = dist
+            matched_indices = linear_assignment(1 - overlaps)
+            
+            for matched in matched_indices:
+                if overlaps[matched[0], matched[1]] == 0:
+                    continue
+                M[t][unmapped_gt[matched[0]]] = unmapped_st[matched[1]]
+                if VERBOSE:
+                    print 'adding mapping: %d to %d'%(unmapped_gt[matched[0]], M[t][unmapped_gt[matched[0]]])
         cur_tracked = M[t].keys()
         st_tracked = M[t].values()
         fps = [key for key in st_inds[t].keys() if key not in M[t].values()] 
@@ -97,19 +102,18 @@ def clear_mot_hungarian(stDB, gtDB):
         fp[t] = len(st_inds[t].keys())
         fp[t] -= c[t]
         missed[t] = g[t] - c[t]
-
         for i in xrange(len(cur_tracked)):
             ct = cur_tracked[i]
             est = M[t][ct]
             row_gt = gt_inds[t][ct]
             row_st = st_inds[t][est]
-            d[t][ct] = 1 - bbox_overlap(stDB[row_gt, 2:6], gtDB[row_st, 2:6])
+            d[t][ct] = bbox_overlap(stDB[row_st, 2:6], gtDB[row_gt, 2:6])
         
     return mme, c, fp, g, missed, d, M, allfps
 
 def idmeasures(gtDB, stDB, threshold):
-    st_ids = list(set(stDB[:, 1]))
-    gt_ids = list(set(gtDB[:, 1]))
+    st_ids = np.unique(stDB[:, 1])
+    gt_ids = np.unique(gtDB[:, 1])
     n_st = len(st_ids)
     n_gt = len(gt_ids)
     groundtruth = [gtDB[np.where(gtDB[:, 1] == i)[0], :] for i in xrange(n_gt)]
@@ -121,7 +125,7 @@ def idmeasures(gtDB, stDB, threshold):
     fp = np.zeros(cost.shape)
     fn = np.zeros(cost.shape)
 
-    cost_block, fp_block, fn_block = cost_between_gt_pred(groundtruth, prediction, theshold)
+    cost_block, fp_block, fn_block = cost_between_gt_pred(groundtruth, prediction, threshold)
 
     cost[:n_gt, :n_st] = cost_block
     fp[:n_gt, :n_st] = fp_block
@@ -170,7 +174,7 @@ def idmeasures(gtDB, stDB, threshold):
 
 def corresponding_frame(traj1, len1, traj2, len2):
     p1, p2 = 0, 0
-    loc = np.zeros((len1, 1), dtype=int)
+    loc = np.zeros((len1, ), dtype=int)
     while p1 < len1 and p2 < len2:
         if traj1[p1] < traj2[p2]:
             loc[p1] = -1
@@ -184,7 +188,7 @@ def corresponding_frame(traj1, len1, traj2, len2):
     return loc
 
 def compute_distance(traj1, traj2, matched_pos):
-    distance = np.zeros((len(matched_pos), 1), dtype=float)
+    distance = np.zeros((len(matched_pos), ), dtype=float)
     for i in xrange(len(matched_pos)):
         if matched_pos[i] == -1:
             continue
@@ -225,6 +229,6 @@ def cost_between_gt_pred(groundtruth, prediction, threshold):
     fn = np.zeros((n_gt, n_st), dtype=float)
     for i in xrange(n_gt):
         for j in xrange(n_st):
-            fp[i, j], fn[i, j] = cost_between_trajectories(groundtruth[i], prediction[j])
+            fp[i, j], fn[i, j] = cost_between_trajectories(groundtruth[i], prediction[j], threshold)
             cost[i, j] = fp[i, j] + fn[i, j]
     return cost, fp, fn
