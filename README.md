@@ -1,6 +1,8 @@
 # mot_evaluation
 It is a python implementation of [MOT](https://motchallenge.net/). However, I only reimplement the 2D evaluation part under MOT16 file format.
 
+The IDF1, IDP, IDR now is not agreed with official toolkit. The original implementation might have an indexing bug in the computation of these metrics. 
+
 ### Metrics
 The metrics of MOT16 are based on the following papers:
 
@@ -33,4 +35,5 @@ The meaning of each alias is
 - **MOTAL(MOTA Log)**
 
 ### To Do
-- Debug 
+- Supporting MOT15/MOT17 and DukeMTMC file format 
+
