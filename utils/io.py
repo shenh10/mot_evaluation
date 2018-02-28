@@ -38,8 +38,12 @@ def extract_valid_gt_data(all_data):
     distractor_classes = [2, 7, 8, 12]
     valid_classes = [1]
     
-    # remove ignored classes
-    selected = np.where(all_data[:, 6] != 0)[0]
+    # remove classes in other classes, pedestrain and distractors left for furthur usages
+    selected = np.array([i for i in xrange(all_data.shape[0]) if all_data[i, 7] in valid_classes + distractor_classes])
+    all_data = all_data[selected, :]
+
+    # remove boxes whose centers is out of view
+    selected = np.where((all_data[:, 2] + all_data[:, 4])/2 != 0)[0]
     all_data = all_data[selected, :]
 
     # remove non-human classes from ground truth, and return distractor identities
@@ -50,8 +54,7 @@ def extract_valid_gt_data(all_data):
 
     cond = np.array([i in distractor_classes for i in all_data[:, 7]]) 
     selected = np.where(cond == True)[0]
-    distractor_ids = np.unique(all_data[selected, :])
-
+    distractor_ids = np.unique(all_data[selected, 1])
     return all_data, distractor_ids
 
 def print_format(widths, formaters, values, form_attr):
@@ -64,7 +67,7 @@ def print_metrics(header, metrics, banner=25):
     if len(metrics) == 17:
         print_metrics_ext(header, metrics)
         return 
-    print '*' * banner, header, '*' * banner
+    print '\n', '*' * banner, header, '*' * banner
     metric_names_long = ['Recall','Precision','False Alarm Rate', \
     'GT Tracks','Mostly Tracked','Partially Tracked','Mostly Lost', \
     'False Positives', 'False Negatives', 'ID Switches', 'Fragmentations',\
@@ -96,7 +99,7 @@ def print_metrics(header, metrics, banner=25):
                      for (start, end) in splits])
 
 def print_metrics_ext(header, metrics, banner=30):
-    print '*' * banner, header, '*' * banner
+    print '\n', '*' * banner, header, '*' * banner
     metric_names_long = ['IDF1', 'IDP', 'IDR', \
     'Recall','Precision','False Alarm Rate', \
     'GT Tracks','Mostly Tracked','Partially Tracked','Mostly Lost', \

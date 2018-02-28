@@ -30,22 +30,21 @@ def clear_mot_hungarian(stDB, gtDB, threshold):
 
     # hash the indices to speed up indexing
     for i in xrange(gtDB.shape[0]):
-        #frame = int(gtDB[i, 0]) - 1
-        #gid = int(gtDB[i, 1])
         frame = np.where(gt_frames == gtDB[i, 0])[0][0]
         gid = np.where(gt_ids == gtDB[i, 1])[0][0]
-        gt_inds[frame][gid - 1] = i
+        gt_inds[frame][gid] = i
 
+    gt_frames_list = list(gt_frames)
     for i in xrange(stDB.shape[0]):
-        #frame = int(stDB[i, 0]) - 1
-        #sid = int(stDB[i, 1])
-        frame = np.where(st_frames == stDB[i, 0])[0][0]
+        # sometimes detection missed in certain frames, thus should be assigned to groundtruth frame id for alignment
+        frame = gt_frames_list.index(stDB[i, 0])
         sid = np.where(st_ids == stDB[i, 1])[0][0]
         st_inds[frame][sid] = i
 
     for t in xrange(f_gt):
         g[t] = len(gt_inds[t].keys()) 
         
+        # preserving original mapping if box of this trajectory has large enough iou in avoid of ID switch
         if t > 0:
             mappings = M[t - 1].keys()
             sorted(mappings)
@@ -58,6 +57,7 @@ def clear_mot_hungarian(stDB, gtDB, threshold):
                         M[t][mappings[k]] = M[t - 1][mappings[k]]
                         if VERBOSE:
                             print 'perserving mapping: %d to %d'%(mappings[k], M[t][mappings[k]])
+        # mapping remaining groundtruth and estimated boxes
         unmapped_gt, unmapped_st  = [], []
         unmapped_gt = [key for key in gt_inds[t].keys() if key not in M[t].keys()]
         unmapped_st = [key for key in st_inds[t].keys() if key not in M[t].values()]
@@ -68,8 +68,8 @@ def clear_mot_hungarian(stDB, gtDB, threshold):
                 for j in xrange(len(unmapped_st)):
                     row_st = st_inds[t][unmapped_st[j]]
                     dist = bbox_overlap(stDB[row_st, 2:6], gtDB[row_gt, 2:6])
-                    if dist >= threshold:
-                        overlaps[i][j] = dist
+                    if dist[0] >= threshold:
+                        overlaps[i][j] = dist[0]
             matched_indices = linear_assignment(1 - overlaps)
             
             for matched in matched_indices:
@@ -78,12 +78,13 @@ def clear_mot_hungarian(stDB, gtDB, threshold):
                 M[t][unmapped_gt[matched[0]]] = unmapped_st[matched[1]]
                 if VERBOSE:
                     print 'adding mapping: %d to %d'%(unmapped_gt[matched[0]], M[t][unmapped_gt[matched[0]]])
+
+        # compute statistics
         cur_tracked = M[t].keys()
         st_tracked = M[t].values()
         fps = [key for key in st_inds[t].keys() if key not in M[t].values()] 
         for k in xrange(len(fps)):
             allfps[t][fps[k]] = fps[k]
-
         # check miss match errors
         if t > 0:
             for i in xrange(len(cur_tracked)):
@@ -112,8 +113,7 @@ def clear_mot_hungarian(stDB, gtDB, threshold):
             est = M[t][ct]
             row_gt = gt_inds[t][ct]
             row_st = st_inds[t][est]
-            d[t][ct] = 1 - bbox_overlap(stDB[row_st, 2:6], gtDB[row_gt, 2:6])
-        
+            d[t][ct] = bbox_overlap(stDB[row_st, 2:6], gtDB[row_gt, 2:6])
     return mme, c, fp, g, missed, d, M, allfps
 
 def idmeasures(gtDB, stDB, threshold):
@@ -157,7 +157,6 @@ def idmeasures(gtDB, stDB, threshold):
     for matched in matched_indices:
         IDFP += fp[matched[0], matched[1]]
         IDFN += fn[matched[0], matched[1]]
-
     IDTP = nbox_gt - IDFN
     assert IDTP == nbox_st - IDFP
     IDP = IDTP / (IDTP + IDFP) * 100               # IDP = IDTP / (IDTP + IDFP)

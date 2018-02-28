@@ -38,18 +38,20 @@ def preprocessingDB(trackDB, gtDB, distractor_ids, iou_thres, minvis):
             # matched to a partial
             if gt_in_frame_data[matched[1], 8] < minvis:
                 res_keep[res_in_frame[matched[0]]] = 0
-        
+            
+
         # sanity check
         frame_id_pairs = res_in_frame_data[:, :2]
         uniq_frame_id_pairs = np.unique(frame_id_pairs)
         has_duplicates = uniq_frame_id_pairs.shape[0] < frame_id_pairs.shape[0]
         assert not has_duplicates, 'Duplicate ID in same frame [Frame ID: %d].'%i
     keep_idx = np.where(res_keep == 1)[0]
-    print '[TRACK PREPROCESSING]: remaining %d/%d computed boxes'%(len(keep_idx), len(res_keep))
+    print '[TRACK PREPROCESSING]: remove distractors and low visibility boxes, remaining %d/%d computed boxes'%(len(keep_idx), len(res_keep))
     trackDB = trackDB[keep_idx, :]
+    print 'Distractors:', distractor_ids
     cond = np.array([gtDB[i, 1] in distractor_ids for i in xrange(gtDB.shape[0])])
     keep_idx = np.where(cond == False)[0]
-    print '[GT PREPROCESSING]: remaining %d/%d computed boxes'%(len(keep_idx), gtDB.shape[0])
+    print '[GT PREPROCESSING]: Removing distractor boxes, remaining %d/%d computed boxes'%(len(keep_idx), gtDB.shape[0])
     gtDB = gtDB[keep_idx, :]
     return trackDB, gtDB
 
@@ -75,13 +77,12 @@ def evaluate_sequence(trackDB, gtDB, distractor_ids, iou_thres=0.5, minvis=0):
     FN = sum(missed)
     FP = sum(fp)
     IDS = sum(mme)
-    MOTP = (1 - sum(sum(d)) / sum(c)) * 100                                             # MOTP = 1 - sum(1 - iou) / # corrected boxes
+    MOTP = (sum(sum(d)) / sum(c)) * 100                                                 # MOTP = sum(iou) / # corrected boxes
     MOTAL = (1 - (sum(fp) + sum(missed) + np.log10(sum(mme) + 1)) / sum(g)) * 100       # MOTAL = 1 - (# fp + # fn + #log10(ids)) / # gts
     MOTA = (1 - (sum(fp) + sum(missed) + sum(mme)) / sum(g)) * 100                      # MOTA = 1 - (# fp + # fn + # ids) / # gts
     recall = sum(c) / sum(g) * 100                                                      # recall = TP / (TP + FN) = # corrected boxes / # gt boxes
     precision = sum(c) / (sum(fp) + sum(c)) * 100                                       # precision = TP / (TP + FP) = # corrected boxes / # det boxes
     FAR = sum(fp) / f_gt                                                                # FAR = sum(fp) / # frames
-
     MT_stats = np.zeros((n_gt, ), dtype=float)
     for i in xrange(n_gt):
         gt_in_person = np.where(gtDB[:, 1] == gt_ids[i])[0]
@@ -167,15 +168,15 @@ def evaluate_bm(all_metrics):
         missed += all_metrics[i].missed
         ids += all_metrics[i].mme
         overlap_sum += sum(sum(all_metrics[i].d))
-    IDP = IDTP / (IDTP + IDFP) * 100               # IDP = IDTP / (IDTP + IDFP)
-    IDR = IDTP / (IDTP + IDFN) * 100               # IDR = IDTP / (IDTP + IDFN)
-    IDF1 = 2 * IDTP / (nbox_gt + nbox_st) * 100    # IDF1 = 2 * IDTP / (2 * IDTP + IDFP + IDFN)
+    IDP = IDTP / (IDTP + IDFP) * 100                                # IDP = IDTP / (IDTP + IDFP)
+    IDR = IDTP / (IDTP + IDFN) * 100                                # IDR = IDTP / (IDTP + IDFN)
+    IDF1 = 2 * IDTP / (nbox_gt + nbox_st) * 100                     # IDF1 = 2 * IDTP / (2 * IDTP + IDFP + IDFN)
     FAR = fp /  f_gt
-    MOTP = (1 - overlap_sum / c) * 100
+    MOTP = (overlap_sum / c) * 100
     MOTAL = (1 - (fp + missed + np.log10(ids + 1)) / g) * 100       # MOTAL = 1 - (# fp + # fn + #log10(ids)) / # gts
     MOTA = (1 - (fp + missed + ids) / g) * 100                      # MOTA = 1 - (# fp + # fn + # ids) / # gts
-    recall = c / g * 100                                                      # recall = TP / (TP + FN) = # corrected boxes / # gt boxes
-    precision = c / (fp + c) * 100                                       # precision = TP / (TP + FP) = # corrected boxes / # det boxes
+    recall = c / g * 100                                            # recall = TP / (TP + FN) = # corrected boxes / # gt boxes
+    precision = c / (fp + c) * 100                                  # precision = TP / (TP + FP) = # corrected boxes / # det boxes
     metrics = [IDF1, IDP, IDR, recall, precision, FAR, n_gt, MT, PT, ML, fp, missed, ids, FRA, MOTA, MOTP, MOTAL]
     return metrics
 	
