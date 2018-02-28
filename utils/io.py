@@ -43,7 +43,12 @@ def extract_valid_gt_data(all_data):
     all_data = all_data[selected, :]
 
     # remove boxes whose centers is out of view
-    selected = np.where((all_data[:, 2] + all_data[:, 4])/2 != 0)[0]
+    # Cause this tool is not only set for MOT, thus resolution is not assumed provided. In MOT, the maximum width andd height should be taken into consirderation
+
+    selected = np.array([i for i in xrange(all_data.shape[0]) 
+                           if (all_data[i, 2] + all_data[i, 4]) / 2 >= 0 and 
+                              (all_data[i, 3] + all_data[i, 5]) / 2 >= 0])
+
     all_data = all_data[selected, :]
 
     # remove non-human classes from ground truth, and return distractor identities
