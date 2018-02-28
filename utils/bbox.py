@@ -1,3 +1,11 @@
+"""
+2D MOT2016 Evaluation Toolkit
+An python reimplementation of toolkit in 2DMOT16(https://motchallenge.net/data/MOT16/)
+
+This file computes bounding box overlap 
+
+(C) Han Shen(thushenhan@gmail.com), 2018-02
+"""
 import numpy as np
 
 def bbox_overlap(ex_box, gt_box):

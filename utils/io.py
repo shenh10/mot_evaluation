@@ -1,3 +1,11 @@
+"""
+2D MOT2016 Evaluation Toolkit
+An python reimplementation of toolkit in 2DMOT16(https://motchallenge.net/data/MOT16/)
+
+This file deals with file IO / invalid annotation removal / result output 
+
+(C) Han Shen(thushenhan@gmail.com), 2018-02
+"""
 import os
 import numpy as np
 

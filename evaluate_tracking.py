@@ -1,3 +1,17 @@
+"""
+2D MOT2016 Evaluation Toolkit
+An python reimplementation of toolkit in 2DMOT16(https://motchallenge.net/data/MOT16/)
+
+This file executes the evaluation. 
+
+usage:
+python evaluate_tracking.py 
+    --bm                       Whether to evaluate multiple files(benchmarks)
+    --seqmap [filename]        List of sequences to be evaluated
+    --track  [dirname]         Tracking results directory: default path -- [dirname]/[seqname]/res.txt
+    --gt     [dirname]         Groundtruth directory:      default path -- [dirname]/[seqname]/gt.txt
+(C) Han Shen(thushenhan@gmail.com), 2018-02
+"""
 import os
 import numpy as np
 import argparse
@@ -10,6 +24,15 @@ from utils.measurements import clear_mot_hungarian, idmeasures
 
 
 def preprocessingDB(trackDB, gtDB, distractor_ids, iou_thres, minvis):
+    """
+    Preprocess the computed trajectory data.
+    Matching computed boxes to groundtruth to remove distractors and low visibility data in both trackDB and gtDB
+    trackDB: [npoints, 9] computed trajectory data
+    gtDB: [npoints, 9] computed trajectory data
+    distractor_ids: identities of distractors of the sequence
+    iou_thres: bounding box overlap threshold
+    minvis: minimum visibility of groundtruth boxes
+    """
     track_frames = np.unique(trackDB[:, 0])
     gt_frames = np.unique(gtDB[:, 0])
     nframes = min(len(track_frames), len(gt_frames))  
@@ -49,8 +72,7 @@ def preprocessingDB(trackDB, gtDB, distractor_ids, iou_thres, minvis):
     print '[TRACK PREPROCESSING]: remove distractors and low visibility boxes, remaining %d/%d computed boxes'%(len(keep_idx), len(res_keep))
     trackDB = trackDB[keep_idx, :]
     print 'Distractors:', distractor_ids
-    cond = np.array([gtDB[i, 1] in distractor_ids for i in xrange(gtDB.shape[0])])
-    keep_idx = np.where(cond == False)[0]
+    keep_idx = np.array([i for i in xrange(gtDB.shape[0]) if gtDB[i, 1] not in distractor_ids and gtDB[i, 8] >= minvis])
     print '[GT PREPROCESSING]: Removing distractor boxes, remaining %d/%d computed boxes'%(len(keep_idx), gtDB.shape[0])
     gtDB = gtDB[keep_idx, :]
     return trackDB, gtDB
@@ -141,6 +163,9 @@ def evaluate_sequence(trackDB, gtDB, distractor_ids, iou_thres=0.5, minvis=0):
    
 
 def evaluate_bm(all_metrics):
+    """
+    Evaluate whole benchmark, summaries all metrics
+    """
     f_gt, n_gt, n_st = 0, 0, 0
     nbox_gt, nbox_st = 0, 0
     c, g, fp, missed, ids = 0, 0, 0, 0, 0

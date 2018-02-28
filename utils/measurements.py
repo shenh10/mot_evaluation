@@ -1,9 +1,37 @@
+"""
+2D MOT2016 Evaluation Toolkit
+An python reimplementation of toolkit in 2DMOT16(https://motchallenge.net/data/MOT16/)
+
+This file lists the matching algorithms.
+1. clear_mot_hungarian: Compute CLEAR_MOT metrics
+
+- Bernardin, Keni, and Rainer Stiefelhagen. "Evaluating multiple object tracking performance: the CLEAR MOT metrics." Journal on Image and Video Processing 2008 (2008): 1.
+
+2. idmeasures: Compute MTMC metrics
+
+- Ristani, Ergys, et al. "Performance measures and a data set for multi-target, multi-camera tracking." European Conference on Computer Vision. Springer, Cham, 2016.
+
+
+
+usage:
+python evaluate_tracking.py 
+    --bm                       Whether to evaluate multiple files(benchmarks)
+    --seqmap [filename]        List of sequences to be evaluated
+    --track  [dirname]         Tracking results directory: default path -- [dirname]/[seqname]/res.txt
+    --gt     [dirname]         Groundtruth directory:      default path -- [dirname]/[seqname]/gt.txt
+(C) Han Shen(thushenhan@gmail.com), 2018-02
+"""
+
 import numpy as np
 from sklearn.utils.linear_assignment_ import linear_assignment
 from bbox import bbox_overlap
 from easydict import EasyDict as edict
 VERBOSE = False
 def clear_mot_hungarian(stDB, gtDB, threshold):
+    """
+    compute CLEAR_MOT and other metrics
+    [recall, precision, FAR, GT, MT, PT, ML, falsepositives, false negatives, idswitches, FRA, MOTA, MOTP, MOTAL]
+    """
     st_frames = np.unique(stDB[:, 0])
     gt_frames = np.unique(gtDB[:, 0])
     st_ids = np.unique(stDB[:, 1])
@@ -117,6 +145,10 @@ def clear_mot_hungarian(stDB, gtDB, threshold):
     return mme, c, fp, g, missed, d, M, allfps
 
 def idmeasures(gtDB, stDB, threshold):
+    """
+    compute MTMC metrics
+    [IDP, IDR, IDF1]
+    """
     st_ids = np.unique(stDB[:, 1])
     gt_ids = np.unique(gtDB[:, 1])
     n_st = len(st_ids)
@@ -129,7 +161,7 @@ def idmeasures(gtDB, stDB, threshold):
     
     fp = np.zeros(cost.shape)
     fn = np.zeros(cost.shape)
-
+    # cost matrix of all trajectory pairs
     cost_block, fp_block, fn_block = cost_between_gt_pred(groundtruth, prediction, threshold)
 
     cost[:n_gt, :n_st] = cost_block
@@ -176,6 +208,10 @@ def idmeasures(gtDB, stDB, threshold):
     return measures
 
 def corresponding_frame(traj1, len1, traj2, len2):
+    """
+    Find the matching position in traj2 regarding to traj1
+    Assume both trajectories in ascending frame ID
+    """
     p1, p2 = 0, 0
     loc = -1 * np.ones((len1, ), dtype=int)
     while p1 < len1 and p2 < len2:
@@ -191,6 +227,9 @@ def corresponding_frame(traj1, len1, traj2, len2):
     return loc
 
 def compute_distance(traj1, traj2, matched_pos):
+    """
+    Compute the loss hit in traj2 regarding to traj1
+    """
     distance = np.zeros((len(matched_pos), ), dtype=float)
     for i in xrange(len(matched_pos)):
         if matched_pos[i] == -1:
