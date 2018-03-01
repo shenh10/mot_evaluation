@@ -31,7 +31,7 @@ def preprocessingDB(trackDB, gtDB, distractor_ids, iou_thres, minvis):
     gtDB: [npoints, 9] computed trajectory data
     distractor_ids: identities of distractors of the sequence
     iou_thres: bounding box overlap threshold
-    minvis: minimum visibility of groundtruth boxes
+    minvis: minimum visibility of groundtruth boxes, default set to zero because the occluded people are supposed to be interpolated for tracking.
     """
     track_frames = np.unique(trackDB[:, 0])
     gt_frames = np.unique(gtDB[:, 0])

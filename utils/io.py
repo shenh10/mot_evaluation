@@ -38,7 +38,7 @@ def read_txt_to_struct(fname):
     
     return data
 
-def extract_valid_gt_data(all_data):
+def extract_valid_gt_data(all_data, remove_ofv=False):
     """
     remove non-valid classes. 
     following mot2016 format, valid class include [1: pedestrain], distractor classes include [2: person on vehicle, 7: static person, 8: distractor, 12: reflection].
@@ -53,14 +53,16 @@ def extract_valid_gt_data(all_data):
     # remove boxes whose centers is out of view
     # Cause this tool is not only set for MOT, thus resolution is not assumed provided. In MOT, the maximum width andd height should be taken into consirderation
 
-    selected = np.array([i for i in xrange(all_data.shape[0]) 
-                           if (all_data[i, 2] + all_data[i, 4]) / 2 >= 0 and 
-                              (all_data[i, 3] + all_data[i, 5]) / 2 >= 0])
-    
-    #selected = np.array([i for i in xrange(all_data.shape[0]) 
-    #                       if (all_data[i, 2] + all_data[i, 4]) / 2 != 0  
-    #                          ])
-    all_data = all_data[selected, :]
+    # PS: As stated by author of MOT benchmark, it would be better the tracker could figure out the out of view pedestrain like human does. Thus no filtering
+    if remove_ofv: 
+        selected = np.array([i for i in xrange(all_data.shape[0]) 
+                               if (all_data[i, 2] + all_data[i, 4]) / 2 >= 0 and 
+                                  (all_data[i, 3] + all_data[i, 5]) / 2 >= 0])
+        
+        #selected = np.array([i for i in xrange(all_data.shape[0]) 
+        #                       if (all_data[i, 2] + all_data[i, 4]) / 2 != 0  
+        #                          ])
+        all_data = all_data[selected, :]
 
     # remove non-human classes from ground truth, and return distractor identities
     cond = np.array([i in valid_classes + distractor_classes for i in all_data[:, 7]]) 
