@@ -72,7 +72,8 @@ def preprocessingDB(trackDB, gtDB, distractor_ids, iou_thres, minvis):
     print '[TRACK PREPROCESSING]: remove distractors and low visibility boxes, remaining %d/%d computed boxes'%(len(keep_idx), len(res_keep))
     trackDB = trackDB[keep_idx, :]
     print 'Distractors:', distractor_ids
-    keep_idx = np.array([i for i in xrange(gtDB.shape[0]) if gtDB[i, 1] not in distractor_ids and gtDB[i, 8] >= minvis])
+    #keep_idx = np.array([i for i in xrange(gtDB.shape[0]) if gtDB[i, 1] not in distractor_ids and gtDB[i, 8] >= minvis])
+    keep_idx = np.array([i for i in xrange(gtDB.shape[0]) if gtDB[i, 6] != 0] )
     print '[GT PREPROCESSING]: Removing distractor boxes, remaining %d/%d computed boxes'%(len(keep_idx), gtDB.shape[0])
     gtDB = gtDB[keep_idx, :]
     return trackDB, gtDB

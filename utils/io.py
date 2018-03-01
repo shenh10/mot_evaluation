@@ -45,7 +45,7 @@ def extract_valid_gt_data(all_data):
     """
     distractor_classes = [2, 7, 8, 12]
     valid_classes = [1]
-    
+    original = all_data.shape[0]
     # remove classes in other classes, pedestrain and distractors left for furthur usages
     selected = np.array([i for i in xrange(all_data.shape[0]) if all_data[i, 7] in valid_classes + distractor_classes])
     all_data = all_data[selected, :]
@@ -56,7 +56,10 @@ def extract_valid_gt_data(all_data):
     selected = np.array([i for i in xrange(all_data.shape[0]) 
                            if (all_data[i, 2] + all_data[i, 4]) / 2 >= 0 and 
                               (all_data[i, 3] + all_data[i, 5]) / 2 >= 0])
-
+    
+    #selected = np.array([i for i in xrange(all_data.shape[0]) 
+    #                       if (all_data[i, 2] + all_data[i, 4]) / 2 != 0  
+    #                          ])
     all_data = all_data[selected, :]
 
     # remove non-human classes from ground truth, and return distractor identities
