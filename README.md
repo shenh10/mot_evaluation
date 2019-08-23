@@ -1,9 +1,9 @@
----
+<!-- ---
 export_on_save:
  html: true
----
+--- -->
 
-# mot_evaluation
+# MOT2016/2017 Evaluation Toolkit
 It is a python implementation of [MOT](https://motchallenge.net/). However, I only reimplement the 2D evaluation part under MOT16 file format.
 
 The IDF1, IDP, IDR now is not agreed with official toolkit. The original implementation might have an indexing bug in the computation of these metrics. 
@@ -20,6 +20,9 @@ Typical evaluation format is shown as
 ```bash
 IDF1  IDP  IDR| Rcll  Prcn   FAR|   GT  MT   PT   ML|    FP    FN   IDs    FM|  MOTA  MOTP MOTAL
 ```
+
+<span style="color:red;"> Github doesn't support latex formula. To have a better reading experience see [here](http://htmlpreview.github.io/?https://github.com/shenh10/mot_evaluation/blob/master/README.html)</span>
+
 The meaning of each alias is 
 - **IDF1(ID F1 Score)**: 
     $$ IDF1 = \frac{2 * IDTP} {2 * IDTP + IDFP + IDFN} $$
