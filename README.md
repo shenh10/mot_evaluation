@@ -1,3 +1,8 @@
+---
+export_on_save:
+ html: true
+---
+
 # mot_evaluation
 It is a python implementation of [MOT](https://motchallenge.net/). However, I only reimplement the 2D evaluation part under MOT16 file format.
 
