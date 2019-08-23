@@ -16,24 +16,55 @@ Typical evaluation format is shown as
 IDF1  IDP  IDR| Rcll  Prcn   FAR|   GT  MT   PT   ML|    FP    FN   IDs    FM|  MOTA  MOTP MOTAL
 ```
 The meaning of each alias is 
-- **IDF1(ID F1 Score)**:
+- **IDF1(ID F1 Score)**: 
+    $$ IDF1 = \frac{2 * IDTP} {2 * IDTP + IDFP + IDFN} $$
 - **IDP(ID Precison)**: 
-- **IDR(ID Recall)**
-- **Rcll(Recall)**
-- **Prcn(Precision)**
-- **FAR(False Alarm Ratio)**
-- **GT(# Groundtruth Trajectory)**
-- **MT(# Mostly Tracked Trajectory)**
-- **PT(# Partially Tracked Trajectory)**
-- **ML(# Mostly Lost Trajectory)**
-- **FP(# False Positives)**
-- **FN(# False Negatives)**
-- **IDs(# IDSwitch)**
-- **FM(# Fragmentations)**
-- **MOTA**
-- **MOTP**
+    $$ IDP = \frac{IDTP}{IDTP + IDFP} $$
+- **IDR(ID Recall)**: 
+    IDR = \frac{IDTP}{IDTP + IDFN}
+- **IDTP**: 
+    The longest associated trajectory matching to a groundtruth trajectory is regarded as the gt's true ID.
+    Then other trajectories matching to this gt is regarded as a 'IDFP'.
+- **Rcll(Recall)**: 
+    The ratio of TP boxes to GT boxes.
+     $$ Recall = \frac{TP}{TP + FN} $$
+- **Prcn(Precision)**: 
+    The ratio of TP boxes to all detected boxes.
+     $$ Precision = \frac{TP}{TP + FP}$$
+- **FAR(False Alarm Ratio)**: 
+    The ratio of FP boxes to frame number.
+     $$FAR = \frac{FP}{\sum_t 1} $$
+- **GT(Number of Groundtruth Trajectory)**: 
+    The number of groundtruth trajectories.
+- **MT(Number of Mostly Tracked Trajectory)**: 
+    The number of trajectories that have over 80% target tracked. 
+- **PT(Number of Partially Tracked Trajectory)**: 
+    The number of trajectories that have 20% to 80% target tracked.
+     $$ PT = GT - MT - ML $$
+- **ML(Number of Mostly Lost Trajectory)**: 
+    The number of trajectories that have less than 20% target tracked.
+    Total false positive number among all frames.
+     $$ FP = \sum_t \sum_i {fp}_{i, t} $$
+- **FN(Number of False Negatives)**: 
+    Total false negative number among all frames.
+     $$ FN = \sum_t \sum_i fn_{i, t} $$
+- **IDs(Number of IDSwitch)**:
+    ID switch number, indicating the times of ID jumps.
+     $$ IDs = \sum_t ids_{i, t}$$ 
+- **FM(Number of Fragmentations)**:
+    ID switch is the special case of fragmentation when ID jumps.
+     Fragmentation reflects the continousity of trajectories.
+     When trajectories are determinated, it counts all missed target in each frame.
+- **MOTA(Number of Multiple Object Tracking Accuracy)**:
+    A metric reflects the tracking accuracy. It has intergrated consideration of FN, FP, and IDS.
+     $$ T = \sum_t \sum_i gt_{i,t} $$, $$ MOTA = 1 - \frac{FN + FP + IDS}{T}$$
+- **MOTP(Number of Multiple Object Tracking Precision)**:
+     A metric reflects the tracking precision.
+      $$ MOTP =  \frac{\sum_{i,t}IoU_{t, i}}{TP} $$
 - **MOTAL(MOTA Log)**
+    $$MOTA = 1 - \frac{FN + FP + \log_{10}IDS}{T}$$
+
 
 ### To Do
 - Supporting MOT15/MOT17 and DukeMTMC file format 
-
+- Optimize the implemenentaion. The current implementation is slow. Any contribution to speed up the code is welcomed.
